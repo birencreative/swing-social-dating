@@ -1,0 +1,56 @@
+/**
+ * ! We haven't used this file in our template. We've used the server actions in the
+ * ! `src/app/server/actions.ts` file to fetch the static data from the fake-db.
+ * ! This file has been created to help you understand how you can create your own API routes.
+ * ! Only consider making API routes if you're planing to share your project data with other applications.
+ * ! else you can use the server actions or third-party APIs to fetch the data from your database.
+ */
+import { dbPool } from '@/lib/db';
+
+
+// Next Imports
+import { responsiveFontSizes } from '@mui/material';
+import { NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic';
+
+
+
+
+export async function POST(req: Request) {
+  try {
+    const { search, excludeProfileId } = await req.json();
+    if (!search) {
+      return NextResponse.json(
+        { exists: false, message: 'Email is required.' },
+        { status: 400 }
+      );
+    }
+
+    console.log('Checking if Email exists:', search, 'excluding profile:', excludeProfileId);
+
+    // Query to check if the email exists
+    let query = `
+        SELECT COUNT(*) AS count 
+        FROM "Users"
+        WHERE LOWER("Email") = LOWER($1)
+      `;
+    const values = [search.trim()];
+
+    if (excludeProfileId) {
+      query += ` AND "Id" NOT IN (SELECT "UserId" FROM "UserProfiles" WHERE "Id" = $2)`;
+      values.push(excludeProfileId);
+    }
+
+    // Execute the query
+    const result = await dbPool.query(query, values);
+    const exists = parseInt(result.rows[0]?.count, 10) > 0;
+
+    console.log(`Email "${search}" exists:`, exists);
+
+    return NextResponse.json({ exists });
+  } catch (error) {
+    console.error('Database query failed:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+

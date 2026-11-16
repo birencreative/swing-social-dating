@@ -1,0 +1,28 @@
+import { dbPool } from '@/lib/db';
+import { NextResponse } from 'next/server';
+
+
+export const dynamic = 'force-dynamic';
+
+// PostgreSQL dbPool connection setup
+
+export async function POST(req: any) {
+    const { postId, comment,profileId,parentId } = await req.json();
+    try {
+        const result = await dbPool.query(
+            'SELECT * FROM insert_comments_reply($1,$2,$3,$4)',
+            [postId, comment,profileId,parentId]
+        );
+
+        console.log(result)
+
+        return NextResponse.json({
+            message: 'Comment created successfully',
+        });
+    }
+    catch (error: any) {
+        return NextResponse.json({
+            message: 'Comment Update failed',
+        }, { status: 400 });
+    }
+}

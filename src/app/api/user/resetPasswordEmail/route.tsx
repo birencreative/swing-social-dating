@@ -1,0 +1,85 @@
+import { dbPool } from '@/lib/db';
+import FormData from "form-data";
+import Mailgun from "mailgun.js";
+
+import { NextResponse } from "next/server";
+
+
+export async function POST(req: any) {
+  try {
+    const { userName } = await req.json();
+
+    const existsSql = `
+          SELECT EXISTS (
+            SELECT 1
+            FROM "Users"
+            WHERE LOWER("Email") = LOWER($1)
+          ) AS "exists";
+        `;
+    const { rows } = await dbPool.query(existsSql, [userName]);
+
+    if (!rows[0]?.exists) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "No registered users found. Please sign up first!",
+        },
+        { status: 404 }
+      );
+    }
+    const result = await dbPool.query(
+      'SELECT * FROM "Configuration" WHERE "ConfigName" = $1',
+      ["EmailApi"]
+    );
+
+    const mailgunKey = result.rows[0].ConfigValue;
+    if (!mailgunKey) {
+      throw new Error("MAILGUN_KEY environment variable is not defined");
+    }
+
+    const mailgun = new Mailgun(FormData);
+    const mg = mailgun.client({
+      username: "api",
+      key: mailgunKey,
+    });
+
+    const emailData: any = {
+      from: "info@swingsocial.co",
+      to: userName,
+      subject: "Reset Your Password - Swing Social",
+      text: "Reset your password",
+      html: `
+				<html>
+					<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+						<h2>Password Reset Request</h2>
+						<p>Hello,</p>
+						<p>We received a request to reset your password for your Swing Social account.</p>
+						<p>To reset your password, please click on the link below:</p>
+						<p><a href="https://app.swingsocial.co/reset-password?email=${encodeURIComponent(
+        userName
+      )}" style="padding: 10px 20px; background-color: #FF2D55; color: white; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
+						<p>If you didn't request this, you can safely ignore this email.</p>
+						<p>This link will expire in 24 hours.</p>
+						<br>
+						<p>Best regards,</p>
+						<p>The Swing Social Team</p>
+					</body>
+				</html>`,
+    };
+
+    const data = await mg.messages.create("swingsocial.co", emailData);
+    return NextResponse.json({
+      success: true,
+      message: "Email sent successfully",
+    });
+  } catch (error: any) {
+    console.error("Error sending email:", error);
+    return NextResponse.json(
+      {
+        message: "Error sending email",
+        error: error.message,
+      },
+      { status: 500 }
+    );
+  }
+}
